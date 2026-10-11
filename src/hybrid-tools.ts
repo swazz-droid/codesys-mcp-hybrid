@@ -6,7 +6,7 @@ import { validateSemantic, validateXsd, ExpectedVariable } from './hybrid-valida
 import { routeOperation } from './hybrid-guidance';
 import { collectSourcesScript, getSymbols, findReferences } from './hybrid-intelligence';
 
-export const reply = (data: any, failed = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], isError: failed });
+export const reply = (data: any, failed = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], isError: Boolean(failed) });
 export function registerHybridTools(server: McpServer, workspace: string) {
     const resolve = (file: string) => path.resolve(workspace, file);
     server.tool('get_workflow_guidance', 'Choose the smallest useful hybrid workflow; call only when the route is unclear.', {

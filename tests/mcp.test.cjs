@@ -2,6 +2,12 @@ const {test}=require('node:test');const assert=require('node:assert/strict');
 const path=require('node:path');const fs=require('node:fs/promises');const os=require('node:os');
 const {Client}=require('@modelcontextprotocol/sdk/client/index.js');
 const {StdioClientTransport}=require('@modelcontextprotocol/sdk/client/stdio.js');
+const {reply}=require('../dist/hybrid-tools');
+test('MCP tool reply always serializes isError as boolean',()=>{
+ const response=reply({ok:true},null);
+ assert.equal(response.isError,false);
+ assert.equal(typeof response.isError,'boolean');
+});
 test('real MCP handshake preserves core tools and exposes truthful offline hybrid gates',async()=>{
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'hybrid-mcp-'));
  const client=new Client({name:'hybrid-test',version:'1'});
