@@ -24,6 +24,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { XMLValidator } from "fast-xml-parser";
 import { registerHybridTools } from './hybrid-tools';
+import { beforeBuild, afterBuild, compileReport } from './hybrid-diagnostics';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -1244,7 +1245,9 @@ except Exception as e:
 
                 compile: {
                     supported: true,
-                    structuredDiagnostics: false
+                    structuredDiagnostics: true,
+                    diagnosticsTool: 'compile_project_diagnostics',
+                    diagnosticsRuntimeVerified: false
                 },
 
                 plcopen: {
@@ -2012,6 +2015,18 @@ except Exception as e:
         }
     );
     // --- End Tools ---
+    server.tool('compile_project_diagnostics', 'Build using the existing Johannes application selection, collect structured Build messages. Unknown diagnostics never mean a successful compile. No PLC download.', {
+        projectFilePath: z.string()
+    }, async ({ projectFilePath }) => {
+        try {
+            const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
+            const template = COMPILE_PROJECT_SCRIPT_TEMPLATE.replace('    target_app.build();', beforeBuild + '\n    target_app.build();\n' + afterBuild);
+            const script = template.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${JSON.stringify(absPath)}`);
+            const result = await executeCodesysScript(script, codesysExePath, codesysProfileName);
+            const report = compileReport(result.output, result.success);
+            return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }], isError: report.status !== 'passed' };
+        } catch (e: any) { return { content: [{ type: 'text', text: JSON.stringify({status:'unknown',error:e.message,next:'Inspect CODESYS; do not automatically retry a timeout'}) }], isError: true }; }
+    });
 
     console.error("SERVER.TS: Resources and Tools defined.");
     // --- End MCP Resources / Tools Definitions ---
