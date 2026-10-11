@@ -118,6 +118,37 @@ the package, not an automatic test that modifies a project.
 
 ## Exactly what remains local/manual
 
+### Follow-up: smaller HMI reads and edits of existing elements
+
+- Added `update_visualization` with required expected values, duplicate-index and
+  property/type guards, batch preflight, native backup and post-save readback.
+- Reader supports property selection, text/exact variable/index filters, pagination
+  and stable response indexes for a current read. Default limit 20 is explicit.
+- Actual SP22 tests on disposable `Hybrid_Edit_Verify`: Unicode heading changed
+  to `Toolkit-test`, width 300 -> 320 -> 340. Initial getter inside modify returned
+  cached old values; moved verification after end_modify/save and reacquired data.
+- A two-element batch with a stale second expected value rejected before mutation;
+  readback confirmed the first proposed change also did not occur.
+- Native comparison proved untouched START button content, tap and navigation
+  identical. CODESYS updated text ID/geometry-center/internal ID counter for the
+  changed heading; these native internal adjustments were retained.
+- Full Screen_1 read: 73 elements, 24,499 response characters, 558 ms. Filtered
+  xHmiStart with two properties: one element, 366 characters, 545 ms (**98.51% less
+  response text**). This is output reduction, not a token-billing or CPU-speed claim.
+  Default pagination returned 20/73 with truncated true; offset 1 on two-element
+  test page returned exactly the second element. Timings are single observations.
+- `npm test`: 19 passing tests, with expanded MCP schema checks rejecting empty
+  expectations, duplicate indexes, invalid dimensions/position types, unsupported
+  event properties and disconnected updates. Build passed. Actual CODESYS compile
+  passed 0 errors/18 existing warnings (`1791693758145-compile_project_diagnostics.json`).
+- Test page removed and original GlobalTextList restored; no original HMI page
+  changed. Artifacts: `hmi-efficiency-report.json`, `hmi-property-diff.txt`,
+  `UpdatedHmi.export`, and MCP response logs in HybridRuntimeVerification.
+- Existing-element IDE editing is verified; actual HMI interaction and event-list
+  rewriting remain outside the claimed verification/support.
+
+### Remaining checks
+
 1. Inspect LD/FBD/SFC graphical editors/connections and HMI layout visually.
 2. Test HMI tap, editable value and navigation in local simulation; existing pages
    and Visualization Manager/WebVisu must remain usable.

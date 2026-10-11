@@ -17,7 +17,8 @@ No PLC download, login, start/stop or online variable writes are added.
 | `hybrid_bridge_status` | Existing IDE bridge heartbeat/project | Offline protection tests; live wrong-project and late read-only timeout result |
 | `import_graphical_xml` | Validate a POU-only file, export native backup, reject name conflicts, import, verify requested direct POU names, save | SP22 LD/FBD/SFC imports, compile signatures and duplicate rejection |
 | `create_visualization` | New page with positions/text/bindings/tap/edit/navigation | SP22 create/save/readback/native event payload; simulator interaction pending |
-| `read_visualization` | Basic positions/text/bindings | SP22 existing 73-element page and new 4-element Unicode page |
+| `read_visualization` | Filter by text/exact variable/index; select properties; paginate | SP22 73-element page: full, filtered, default limit and offset checked |
+| `update_visualization` | Change selected existing text/position/binding properties after expected-value checks; native backup and saved readback | SP22 Unicode title/width update; stale batch rejected before mutation; untouched native button/events identical |
 
 Capability verification is scoped to SP22 Patch 4 (3.5.22.40). Diagnostics and
 textual scans are runtime-verified. Graphical/HMI `ideApiVerified` records actual
@@ -51,6 +52,37 @@ warnings are reported separately from schema errors; an undeclared document root
 still fails validation. This validator requires Windows PowerShell/.NET.
 
 ## Minimal workflow
+
+For existing HMI edits, use `read_visualization` with `textContains`, `variable`
+or `elementIndexes` and a short `properties` list. Filters combine with AND;
+`variable` is an exact match on text/color/tap binding. Indexes are zero-based and
+can change if elements are added/removed. The default read limit is now **20**,
+with `elementCount`, `matchedCount`, `offset`, `truncated` and per-element indexes.
+Use `offset`/`maxResults` for more results or explicit `maxResults: 500` for a full
+page. Never assume the default response contains every element.
+
+Pass recently read property values in `expected` to update existing elements:
+
+```json
+{
+  "projectFilePath": "working-copy.project",
+  "parentPath": "Device/Plc Logic/Application",
+  "name": "Screen_1",
+  "updates": [{
+    "elementIndex": 0,
+    "expected": {"Texts.Text": "Old title", "Position.X": "16"},
+    "set": {"Texts.Text": "Toolkit-test", "Position.Width": 320}
+  }]
+}
+```
+
+All batch preconditions are checked before backup/mutation. Supported keys are
+the eight properties exposed by the reader; positions are finite numbers,
+dimensions positive, and text/bindings strings. Other properties and existing
+event lists are retained. This does not add/delete elements or rewrite navigation
+and edit-action lists. CODESYS applies edits at `end_modify`; saved values are
+reacquired and checked afterward. A setter/save failure can still leave partial
+changes: inspect the native backup/project rather than automatically retrying.
 
 1. Read `get_capabilities` once. Its bridge state reflects the current heartbeat.
 2. ST/POU edits: use the existing Johannes tools, read only the relevant objects,
