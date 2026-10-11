@@ -23,6 +23,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { XMLValidator } from "fast-xml-parser";
+import { registerHybridTools } from './hybrid-tools';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -98,6 +99,7 @@ export async function startMcpServer(config: ServerConfig) {
          }
     });
     console.error("SERVER.TS: McpServer instance created.");
+    registerHybridTools(server, WORKSPACE_DIR);
     // --- End MCP Server Initialization ---
 
 
@@ -1249,8 +1251,10 @@ except Exception as e:
                     import: false,
                     export: false,
                     validation: true,
-                    xsdValidation: false,
-                    semanticValidation: false
+                    xsdValidation: true,
+                    xsdRequirement: 'Local XSD matching XML namespace and Windows PowerShell/.NET',
+                    semanticValidation: true,
+                    runtimeVerified: false
                 },
 
                 nativeCodesys: {
@@ -1453,7 +1457,7 @@ except Exception as e:
                         : "VERDICT: FIX ISSUES BEFORE IMPORT",
                     "",
                     valid
-                        ? "Next: run XSD validation when available, then import."
+                        ? "Next: validate_plcopen_xsd, then validate_plcopen_semantic; import into a backed-up working copy and compile."
                         : "Next: repair/regenerate the XML and validate again."
                 );
 
