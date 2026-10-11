@@ -1,6 +1,8 @@
 
 # @codesys/mcp-toolkit
 
+Hybrid branch: see [hybrid v0.1 setup, workflows and local verification](docs/hybrid-v0.1.md).
+
 ![npm](https://img.shields.io/npm/v/@codesys/mcp-toolkit)
 ![License](https://img.shields.io/github/license/johannesPettersson80/codesys-mcp-toolkit)
 ![Node Version](https://img.shields.io/node/v/@codesys/mcp-toolkit)
@@ -142,4 +144,12 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - The CODESYS GmbH team for the powerful CODESYS platform and its scripting engine.
 - The Model Context Protocol project for defining the interaction standard.
 - All contributors and users who help improve this toolkit.
+
+## Hybrid v0.1 development
+
+This branch retains Johannes Pettersson's MCP toolkit as its core. See
+[hybrid workflows, setup and verification status](docs/hybrid-v0.1.md) for XSD /
+project-based semantic validation, structured diagnostics, routing, textual
+symbol/reference candidates and native-template graphical / IDE HMI tools.
+New CODESYS runtime integrations remain unverified until tested in SP22 Patch 4.
 
