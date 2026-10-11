@@ -22,6 +22,16 @@ test('external library types warn instead of rejecting project based exports',()
  const report=validateSemantic(xml); assert.equal(report.valid,true);assert.equal(report.warnings.length,1);
  assert.equal(validateSemantic(xml,[],['TON']).warnings.length,0);
 });
+test('interface manifest catches omitted variables and changed simple initializers',()=>{
+ const xml='<project><types><pous><pou name="P"><interface><localVars><variable name="x"><type><INT/></type><initialValue><simpleValue value="2"/></initialValue></variable></localVars></interface><body><ST/></body></pou></pous></types></project>';
+ assert.equal(validateSemantic(xml,[],[],{P:[{name:'x',type:'INT',initialValue:'2'}]}).valid,true);
+ assert.equal(validateSemantic(xml,[],[],{P:[{name:'x',initialValue:'3'},{name:'y'}]}).issues.length,2);
+});
+test('CODESYS project exports validate embedded POUs rather than treating empty types/pous as empty project',()=>{
+ const pou='<pou name="P"><body><LD><coil localId="1"><position x="0" y="0"/><connectionPointIn><connection refLocalId="7"/></connectionPointIn></coil></LD></body></pou>';
+ const xml='<project><types><pous/></types><addData><data><resource name="Application"><addData><data>'+pou+'</data></addData></resource></data></addData></project>';
+ const r=validateSemantic(xml,['P']);assert.equal(r.counts.embeddedPous,1);assert.equal(r.valid,false);assert.equal(r.issues[0].code,'DANGLING_CONNECTION');
+});
 test('XSD engine rejects schema-invalid XML and accepts valid XML', {skip:process.platform!=='win32'},async()=>{
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'hybrid-xsd-'));
  try {

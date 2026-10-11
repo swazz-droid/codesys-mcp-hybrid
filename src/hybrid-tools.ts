@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as path from 'path';
 import { readFile } from 'fs/promises';
-import { validateSemantic, validateXsd } from './hybrid-validation';
+import { validateSemantic, validateXsd, ExpectedVariable } from './hybrid-validation';
 import { routeOperation } from './hybrid-guidance';
 import { collectSourcesScript, getSymbols, findReferences } from './hybrid-intelligence';
 
@@ -19,9 +19,10 @@ export function registerHybridTools(server: McpServer, workspace: string) {
         catch (e: any) { return reply({ valid: false, error: e.message }, true); }
     });
     server.tool('validate_plcopen_semantic', 'Check project-based PLCopen POU names, declarations, LD/FBD/SFC local IDs/connections and expected POU presence. Partial exports and external library types are allowed. Does not prove runtime correctness.', {
-        filePath: z.string(), expectedPous: z.array(z.string()).optional(), externalTypes: z.array(z.string()).optional()
-    }, async ({ filePath, expectedPous, externalTypes }) => {
-        try { const report = validateSemantic(await readFile(resolve(filePath), 'utf8'), expectedPous, externalTypes); return reply(report, !report.valid); }
+        filePath: z.string(), expectedPous: z.array(z.string()).optional(), externalTypes: z.array(z.string()).optional(),
+        expectedVariables: z.record(z.array(z.object({name:z.string(),type:z.string().optional(),initialValue:z.string().optional()}))).optional().describe('Optional per-POU interface manifest to detect omitted variables/types/simple initializers without an ST sidecar')
+    }, async ({ filePath, expectedPous, externalTypes, expectedVariables }) => {
+        try { const report = validateSemantic(await readFile(resolve(filePath), 'utf8'), expectedPous, externalTypes, expectedVariables as Record<string, ExpectedVariable[]>); return reply(report, !report.valid); }
         catch (e: any) { return reply({ valid: false, error: e.message }, true); }
     });
 }
