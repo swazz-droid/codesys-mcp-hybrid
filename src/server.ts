@@ -905,6 +905,46 @@ except Exception as e:
     sys.exit(1)
 `;
 
+    const NATIVE_IMPORT_PROJECT_SCRIPT_TEMPLATE = `
+import sys, scriptengine as script_engine, os, traceback
+${ENSURE_PROJECT_OPEN_PYTHON_SNIPPET}
+NATIVE_IMPORT_PATH = r"{NATIVE_IMPORT_PATH}"
+
+try:
+    print("DEBUG: native_import project='%s' source='%s'" % (PROJECT_FILE_PATH, NATIVE_IMPORT_PATH))
+
+    if not os.path.exists(NATIVE_IMPORT_PATH):
+        raise IOError("Native import file not found: %s" % NATIVE_IMPORT_PATH)
+
+    primary_project = ensure_project_open(PROJECT_FILE_PATH)
+
+    result = primary_project.import_native(
+        filename=NATIVE_IMPORT_PATH,
+        filter=None,
+        handler=None
+    )
+
+    print("Native Import Result: %s" % result)
+
+    primary_project.save()
+    print("DEBUG: Project saved after native import.")
+
+    print("SCRIPT_SUCCESS: Native CODESYS import completed successfully.")
+    sys.exit(0)
+
+except Exception as e:
+    detailed_error = traceback.format_exc()
+    error_message = "Error importing native CODESYS file '%s' into '%s': %s\\n%s" % (
+        NATIVE_IMPORT_PATH,
+        PROJECT_FILE_PATH,
+        e,
+        detailed_error
+    )
+    print(error_message)
+    print("SCRIPT_ERROR: %s" % e)
+    sys.exit(1)
+`;
+
     const GET_PROJECT_STRUCTURE_SCRIPT_TEMPLATE = `
 import sys, scriptengine as script_engine, os, traceback
 ${ENSURE_PROJECT_OPEN_PYTHON_SNIPPET}
@@ -1213,7 +1253,7 @@ except Exception as e:
                 },
 
                 nativeCodesys: {
-                    import: false,
+                    import: true,
                     export: true
                 },
 
@@ -1413,6 +1453,91 @@ except Exception as e:
                 console.error(`Error native_export ${absProjectPath}: ${e}`);
                 return {
                     content: [{ type: "text", text: `Native export failed: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    );
+
+    server.tool(
+        "native_import",
+        "Imports a native CODESYS .export file into an existing .project and saves the modified project. This changes the target project.",
+        {
+            projectFilePath: z.string().describe("Path to the target CODESYS .project file that will be modified."),
+            importFilePath: z.string().describe("Path to the native CODESYS .export file to import.")
+        },
+        async (args) => {
+            const { projectFilePath, importFilePath } = args;
+
+            const absProjectPath = path.normalize(
+                path.isAbsolute(projectFilePath)
+                    ? projectFilePath
+                    : path.join(WORKSPACE_DIR, projectFilePath)
+            );
+
+            const absImportPath = path.normalize(
+                path.isAbsolute(importFilePath)
+                    ? importFilePath
+                    : path.join(WORKSPACE_DIR, importFilePath)
+            );
+
+            try {
+                if (!(await fileExists(absProjectPath))) {
+                    return {
+                        content: [{ type: "text", text: `Native import failed: target project not found: ${absProjectPath}` }],
+                        isError: true
+                    };
+                }
+
+                if (!(await fileExists(absImportPath))) {
+                    return {
+                        content: [{ type: "text", text: `Native import failed: .export file not found: ${absImportPath}` }],
+                        isError: true
+                    };
+                }
+
+                if (path.extname(absImportPath).toLowerCase() !== ".export") {
+                    return {
+                        content: [{ type: "text", text: `Native import failed: source file must end with .export: ${absImportPath}` }],
+                        isError: true
+                    };
+                }
+
+                const escapedProjectPath = absProjectPath.replace(/\\/g, "\\\\");
+                const escapedImportPath = absImportPath.replace(/\\/g, "\\\\");
+
+                let script = NATIVE_IMPORT_PROJECT_SCRIPT_TEMPLATE.replace(
+                    "{PROJECT_FILE_PATH}",
+                    escapedProjectPath
+                );
+                script = script.replace(
+                    "{NATIVE_IMPORT_PATH}",
+                    escapedImportPath
+                );
+
+                const result = await executeCodesysScript(
+                    script,
+                    codesysExePath,
+                    codesysProfileName
+                );
+
+                const success =
+                    result.success &&
+                    result.output.includes("SCRIPT_SUCCESS");
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: success
+                            ? `Native CODESYS import completed and project saved.\nTarget: ${absProjectPath}\nSource: ${absImportPath}\n\nNext: compile the target project and inspect the affected objects.`
+                            : `Native import failed for ${absProjectPath}.\nSource: ${absImportPath}\nOutput:\n${result.output}`
+                    }],
+                    isError: !success
+                };
+            } catch (e: any) {
+                console.error(`Error native_import ${absImportPath} -> ${absProjectPath}: ${e}`);
+                return {
+                    content: [{ type: "text", text: `Native import failed: ${e.message}` }],
                     isError: true
                 };
             }
