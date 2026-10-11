@@ -1131,6 +1131,93 @@ except Exception as e:
 
 
     // --- Tools ---
+    // --- Hybrid Capability Discovery ---
+    server.tool(
+        "get_capabilities",
+        "Reports which CODESYS MCP capabilities are currently implemented and available.",
+        {},
+        async () => {
+            const capabilities = {
+                project: {
+                    open: true,
+                    create: true,
+                    save: true,
+                    structureRead: true
+                },
+
+                pou: {
+                    create: true,
+                    readCode: true,
+                    writeCode: true,
+                    createProperty: true,
+                    createMethod: true
+                },
+
+                structuredText: {
+                    read: true,
+                    write: true
+                },
+
+                compile: {
+                    supported: true,
+                    structuredDiagnostics: false
+                },
+
+                plcopen: {
+                    import: false,
+                    export: false,
+                    validation: false,
+                    xsdValidation: false,
+                    semanticValidation: false
+                },
+
+                nativeCodesys: {
+                    import: false,
+                    export: false
+                },
+
+                graphical: {
+                    LD: false,
+                    FBD: false,
+                    SFC: false,
+                    CFC: false
+                },
+
+                visualization: {
+                    read: false,
+                    write: false
+                },
+
+                codeIntelligence: {
+                    symbols: false,
+                    findReferences: false
+                },
+
+                safety: {
+                    projectBackup: false,
+                    snapshotRollback: false,
+                    workspaceRestriction: false
+                },
+
+                performance: {
+                    batchOperations: false,
+                    persistentCodesysSession: false
+                }
+            };
+
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: JSON.stringify(capabilities, null, 2)
+                    }
+                ],
+                isError: false
+            };
+        }
+    );
+    // --- End Hybrid Capability Discovery ---
+
     server.tool(
         "open_project", // Tool Name
         "Opens an existing CODESYS project file.", // Tool Description
