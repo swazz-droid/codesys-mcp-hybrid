@@ -864,6 +864,47 @@ except Exception as e:
     print(error_message); print("SCRIPT_ERROR: %s" % error_message); sys.exit(1)
 `;
 
+    const NATIVE_EXPORT_PROJECT_SCRIPT_TEMPLATE = `
+import sys, scriptengine as script_engine, os, traceback
+${ENSURE_PROJECT_OPEN_PYTHON_SNIPPET}
+NATIVE_EXPORT_PATH = r"{NATIVE_EXPORT_PATH}"
+try:
+    print("DEBUG: native_export project='%s' destination='%s'" % (PROJECT_FILE_PATH, NATIVE_EXPORT_PATH))
+    primary_project = ensure_project_open(PROJECT_FILE_PATH)
+
+    export_dir = os.path.dirname(NATIVE_EXPORT_PATH)
+    if export_dir and not os.path.exists(export_dir):
+        os.makedirs(export_dir)
+
+    objects = list(primary_project.get_children(False))
+    if not objects:
+        raise RuntimeError("Project contains no top-level objects to export.")
+
+    primary_project.export_native(
+        objects,
+        NATIVE_EXPORT_PATH,
+        True,
+        False,
+        None,
+        None
+    )
+
+    if not os.path.exists(NATIVE_EXPORT_PATH):
+        raise RuntimeError("CODESYS export_native returned without creating the destination file.")
+
+    file_size = os.path.getsize(NATIVE_EXPORT_PATH)
+    print("Native Export Path: %s" % NATIVE_EXPORT_PATH)
+    print("Native Export Bytes: %d" % file_size)
+    print("SCRIPT_SUCCESS: Native CODESYS export created successfully.")
+    sys.exit(0)
+except Exception as e:
+    detailed_error = traceback.format_exc()
+    error_message = "Error creating native export for '%s': %s\\n%s" % (PROJECT_FILE_PATH, e, detailed_error)
+    print(error_message)
+    print("SCRIPT_ERROR: %s" % e)
+    sys.exit(1)
+`;
+
     const GET_PROJECT_STRUCTURE_SCRIPT_TEMPLATE = `
 import sys, scriptengine as script_engine, os, traceback
 ${ENSURE_PROJECT_OPEN_PYTHON_SNIPPET}
@@ -1173,7 +1214,7 @@ except Exception as e:
 
                 nativeCodesys: {
                     import: false,
-                    export: false
+                    export: true
                 },
 
                 graphical: {
@@ -1281,6 +1322,97 @@ except Exception as e:
                 console.error(`Error backup_project ${absProjectPath}: ${e}`);
                 return {
                     content: [{ type: "text", text: `Backup failed: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    );
+
+    server.tool(
+        "native_export",
+        "Exports all top-level CODESYS project objects recursively to one native CODESYS .export XML file.",
+        {
+            projectFilePath: z.string().describe("Path to the CODESYS .project file."),
+            destinationPath: z.string().optional().describe("Optional output .export path. Defaults to '<workspace>/Exports/<project>_<timestamp>.export'.")
+        },
+        async (args) => {
+            const { projectFilePath, destinationPath } = args;
+
+            const absProjectPath = path.normalize(
+                path.isAbsolute(projectFilePath)
+                    ? projectFilePath
+                    : path.join(WORKSPACE_DIR, projectFilePath)
+            );
+
+            try {
+                if (!(await fileExists(absProjectPath))) {
+                    return {
+                        content: [{ type: "text", text: `Native export failed: project file not found: ${absProjectPath}` }],
+                        isError: true
+                    };
+                }
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                const projectBase = path.basename(absProjectPath, path.extname(absProjectPath));
+                const defaultExportPath = path.join(
+                    WORKSPACE_DIR,
+                    "Exports",
+                    `${projectBase}_${timestamp}.export`
+                );
+
+                const absDestinationPath = path.normalize(
+                    destinationPath
+                        ? (path.isAbsolute(destinationPath)
+                            ? destinationPath
+                            : path.join(WORKSPACE_DIR, destinationPath))
+                        : defaultExportPath
+                );
+
+                if (path.extname(absDestinationPath).toLowerCase() !== ".export") {
+                    return {
+                        content: [{ type: "text", text: `Native export failed: destination must end with .export: ${absDestinationPath}` }],
+                        isError: true
+                    };
+                }
+
+                await fsPromises.mkdir(path.dirname(absDestinationPath), { recursive: true });
+
+                const escapedProjectPath = absProjectPath.replace(/\\/g, "\\\\");
+                const escapedDestinationPath = absDestinationPath.replace(/\\/g, "\\\\");
+
+                let script = NATIVE_EXPORT_PROJECT_SCRIPT_TEMPLATE.replace(
+                    "{PROJECT_FILE_PATH}",
+                    escapedProjectPath
+                );
+                script = script.replace(
+                    "{NATIVE_EXPORT_PATH}",
+                    escapedDestinationPath
+                );
+
+                const result = await executeCodesysScript(
+                    script,
+                    codesysExePath,
+                    codesysProfileName
+                );
+
+                const success =
+                    result.success &&
+                    result.output.includes("SCRIPT_SUCCESS") &&
+                    await fileExists(absDestinationPath);
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: success
+                            ? `Native CODESYS export created: ${absDestinationPath}\n\nNext: verify the .export file before enabling native import.`
+                            : `Native export failed for ${absProjectPath}.\nOutput:\n${result.output}`
+                    }],
+                    isError: !success
+                };
+            } catch (e: any) {
+                console.error(`Error native_export ${absProjectPath}: ${e}`);
+                return {
+                    content: [{ type: "text", text: `Native export failed: ${e.message}` }],
                     isError: true
                 };
             }
