@@ -1194,7 +1194,7 @@ except Exception as e:
                 },
 
                 safety: {
-                    projectBackup: false,
+                    projectBackup: true,
                     snapshotRollback: false,
                     workspaceRestriction: false
                 },
@@ -1217,6 +1217,75 @@ except Exception as e:
         }
     );
     // --- End Hybrid Capability Discovery ---
+
+    server.tool(
+        "backup_project",
+        "Creates a timestamped backup copy of a CODESYS .project file before risky or multi-step changes.",
+        {
+            projectFilePath: z.string().describe("Path to the CODESYS project file to back up."),
+            backupDir: z.string().optional().describe("Optional backup directory. Defaults to '<workspace>/Backups'."),
+            label: z.string().optional().describe("Optional short label added to the backup filename.")
+        },
+        async (args) => {
+            const { projectFilePath, backupDir, label } = args;
+
+            const absProjectPath = path.normalize(
+                path.isAbsolute(projectFilePath)
+                    ? projectFilePath
+                    : path.join(WORKSPACE_DIR, projectFilePath)
+            );
+
+            try {
+                if (!(await fileExists(absProjectPath))) {
+                    return {
+                        content: [{ type: "text", text: `Backup failed: project file not found: ${absProjectPath}` }],
+                        isError: true
+                    };
+                }
+
+                const resolvedBackupDir = path.normalize(
+                    backupDir
+                        ? (path.isAbsolute(backupDir) ? backupDir : path.join(WORKSPACE_DIR, backupDir))
+                        : path.join(WORKSPACE_DIR, "Backups")
+                );
+
+                await fsPromises.mkdir(resolvedBackupDir, { recursive: true });
+
+                const ext = path.extname(absProjectPath);
+                const baseName = path.basename(absProjectPath, ext);
+                const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                const safeLabel = (label ?? "")
+                    .trim()
+                    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+                    .replace(/^-+|-+$/g, "");
+
+                const backupFileName =
+                    `${baseName}_${timestamp}${safeLabel ? `_${safeLabel}` : ""}${ext}`;
+
+                const backupPath = path.join(resolvedBackupDir, backupFileName);
+
+                await fsPromises.copyFile(absProjectPath, backupPath);
+
+                return {
+                    content: [{
+                        type: "text",
+                        text:
+                            `Backup created successfully.\n` +
+                            `Source: ${absProjectPath}\n` +
+                            `Backup: ${backupPath}\n\n` +
+                            `Next: proceed with the planned project changes.`
+                    }],
+                    isError: false
+                };
+            } catch (e: any) {
+                console.error(`Error backup_project ${absProjectPath}: ${e}`);
+                return {
+                    content: [{ type: "text", text: `Backup failed: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    );
 
     server.tool(
         "open_project", // Tool Name
