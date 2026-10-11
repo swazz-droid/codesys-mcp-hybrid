@@ -1288,11 +1288,15 @@ except Exception as e:
                 visualization: {
                     read: true,
                     write: true,
-                    writeMode: 'Create new pages only; reject existing pages',
+                    writeMode: 'Create new pages; update selected existing element properties with expected-value guards and native backup',
+                    filteredRead: true,
+                    readDefaultLimit: 20,
+                    updateExistingElements: true,
+                    updateEventLists: false,
                     webVisuCreation: false,
                     runtimeVerified: false,
                     ideApiVerified: true,
-                    verificationScope: 'SP22 Patch 4: create/save/readback including Unicode, native tap/edit/navigation payload and collision rejection; user interaction untested',
+                    verificationScope: 'SP22 Patch 4: create/save/readback, filtered reads, guarded existing text/size updates, Unicode, retained native event payload and collision rejection; user interaction untested',
                     requiresBridge: true
                 },
 

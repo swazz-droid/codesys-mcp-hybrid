@@ -5,7 +5,7 @@ export function routeOperation(operation: string) {
         backup: { route: 'native', tools: ['backup_project', 'native_export'], next: 'Retain .project backup and full native .export; check contents' },
         transfer: { route: 'native', tools: ['native_export', 'native_import'], next: 'Use a working copy; inspect tree/HMI/I/O/tasks after import' },
         graphical: { route: 'PLCopen + scripting', tools: ['validate_plcopen_xml', 'validate_plcopen_xsd', 'validate_plcopen_semantic', 'import_graphical_xml'], next: 'Preserve native body/extensions, import into working copy, inspect objects and task bindings, compile' },
-        hmi: { route: 'IDE scripting', tools: ['hybrid_bridge_status', 'read_visualization', 'create_visualization'], next: 'Use existing Visualization Manager/WebVisu; back up, edit page, compile and test HMI interactions' },
+        hmi: { route: 'IDE scripting', tools: ['hybrid_bridge_status', 'read_visualization', 'create_visualization', 'update_visualization'], next: 'Filter the read by text/variable/index and select properties; use returned indexes with expected values to batch updates; reuse existing Visualization Manager/WebVisu, compile once and test interactions' },
         diagnostics: { route: 'Johannes build + message collection', tools: ['compile_project_diagnostics'], next: 'Fix actual reported errors, batch edits, compile once' },
         intelligence: { route: 'project text scan', tools: ['get_symbols', 'find_references'], next: 'Confirm candidate bindings/types in CODESYS before rename or refactor' }
     };

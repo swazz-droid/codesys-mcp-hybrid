@@ -10,7 +10,7 @@ test('real MCP handshake preserves core tools and exposes truthful offline hybri
  try{
   await client.connect(transport);
   const names=(await client.listTools()).tools.map(t=>t.name);
-  for(const name of ['create_pou','set_pou_code','compile_project','native_export','native_import','backup_project','validate_plcopen_xml','validate_plcopen_xsd','validate_plcopen_semantic','compile_project_diagnostics','get_symbols','find_references','prepare_graphical_xml','import_graphical_xml','create_visualization','read_visualization']) assert.ok(names.includes(name),name);
+  for(const name of ['create_pou','set_pou_code','compile_project','native_export','native_import','backup_project','validate_plcopen_xml','validate_plcopen_xsd','validate_plcopen_semantic','compile_project_diagnostics','get_symbols','find_references','prepare_graphical_xml','import_graphical_xml','create_visualization','read_visualization','update_visualization']) assert.ok(names.includes(name),name);
   assert.ok(client.getInstructions().includes('Johannes'));
   const templates=(await client.listResourceTemplates()).resourceTemplates.map(r=>r.uriTemplate);
   assert.ok(templates.some(uri=>uri.includes('/structure')));assert.ok(templates.some(uri=>uri.includes('/pou/')));
@@ -22,6 +22,16 @@ test('real MCP handshake preserves core tools and exposes truthful offline hybri
   assert.equal(cap.plcopen.xsdValidation,true);assert.equal(cap.graphical.runtimeVerified,false);assert.equal(cap.bridge.connected,false);
   assert.equal(cap.compile.diagnosticsRuntimeVerified,true);assert.equal(cap.graphical.ideApiVerified,true);
   assert.equal(cap.visualization.runtimeVerified,false);assert.equal(cap.codeIntelligence.compilerResolved,false);
+  assert.equal(cap.visualization.filteredRead,true);assert.equal(cap.visualization.updateExistingElements,true);assert.equal(cap.visualization.updateEventLists,false);
+  const change={elementIndex:0,expected:{'Texts.Text':'Old'},set:{'Texts.Text':'New'}};
+  for(const updates of [[{...change,expected:{}}],[change,change],[{...change,set:{'Position.Width':-1}}],[{...change,set:{'Position.X':'10'}}],[{...change,set:{'Input actions.OnMouseDown':'replace'}}]]) {
+   const request={name:'update_visualization',arguments:{projectFilePath:'copy.project',parentPath:'Application',name:'Page',updates}};
+   let failed=false;try{const response=await client.callTool(request);failed=response.isError===true;}catch(e){failed=/Invalid|validation|argument/i.test(e.message);}
+   assert.equal(failed,true,'unsafe update inputs must be rejected');
+  }
+  const noBridgeUpdate=await client.callTool({name:'update_visualization',arguments:{projectFilePath:'copy.project',parentPath:'Application',name:'Page',updates:[change]}});
+  assert.equal(noBridgeUpdate.isError,true);assert.ok(JSON.parse(noBridgeUpdate.content[0].text).error.includes('no request submitted'));
+  await assert.rejects(fs.stat(path.join(dir,'queue')));
   const xml=path.join(dir,'test.xml');await fs.writeFile(xml,'<project><types><pous/></types></project>');
   const ok=await client.callTool({name:'validate_plcopen_semantic',arguments:{filePath:xml}});assert.equal(ok.isError,false);
   const failed=await client.callTool({name:'validate_plcopen_semantic',arguments:{filePath:xml,expectedPous:['Missing']}});assert.equal(failed.isError,true);

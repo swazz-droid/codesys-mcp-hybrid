@@ -7,6 +7,7 @@ import { bridgeStatus, projectGuard, pythonValue, runBridge } from './hybrid-bri
 import { prepareGraphicalXml } from './hybrid-graphical';
 import { array, parsePlcopen, validateSemantic, validateXsd } from './hybrid-validation';
 import { reply } from './hybrid-tools';
+import { visualProperties, readVisualScript, updateVisualScript } from './hybrid-visualization';
 
 export function registerIdeTools(server: McpServer, workspace: string, bridgeDir: string) {
     const resolve = (file: string) => path.resolve(workspace, file);
@@ -62,9 +63,29 @@ export function registerIdeTools(server: McpServer, workspace: string, bridgeDir
             return reply({...await execute(projectFilePath,script),runtimeVerified:false,next:'Compile, verify HMI variable types/events/navigation in CODESYS; reuse existing WebVisu/Visualization Manager'});
         } catch(e:any) { return reply({error:e.message,nativeBackup,next:'Inspect project and any native backup before any retry'},true); }
     });
-    server.tool('read_visualization', 'Read page positions/text/variable bindings from the existing IDE. Does not export a complete HMI or resolve event configuration.', {...target,name:identifier},async ({projectFilePath,parentPath,name})=>{
+    const property = z.enum(visualProperties);
+    server.tool('update_visualization', 'Update selected properties on existing HMI elements, preserving other properties/events. Use indexes and expected values from a recent filtered read. Checks all preconditions, exports native backup, modifies and saves once. No element creation/deletion or event-list replacement.', {
+        ...target, name:identifier,
+        updates:z.array(z.object({
+            elementIndex:z.number().int().min(0),
+            expected:z.record(property,z.string()).refine(values=>Object.keys(values).length>0,'Expected properties required'),
+            set:z.record(property,z.union([z.string(),z.number().finite()])).refine(values=>Object.keys(values).length>0 && Object.entries(values).every(([key,value])=>key.startsWith('Position.') ? typeof value==='number' && (!/Width|Height/.test(key) || value>0) : typeof value==='string'),'Use finite numeric positions, positive dimensions and string text/bindings')
+        })).min(1).max(100).refine(changes=>new Set(changes.map(c=>c.elementIndex)).size===changes.length,'Duplicate element indexes are not allowed')
+    },async ({projectFilePath,parentPath,name,updates})=>{
+        let nativeBackup:string;
         try {
-            const script = projectGuard(resolve(projectFilePath),parentPath)+`matches = [obj for obj in parent.get_children(False) if obj.get_name() == ${pythonValue(name)}]\nif len(matches) != 1: raise RuntimeError('Page missing/ambiguous')\nv = matches[0]\nproperties = ['Position.X','Position.Y','Position.Width','Position.Height','Texts.Text','Text variables.Text variable','Color variables.Toggle color','Input configuration.Tap.Variable']\nitems = []\nfor element in v.visual_element_list:\n    item = {}\n    for key in properties:\n        try:\n            value = element.get_property(key)\n            item[key] = str(value) if value is not None else None\n        except Exception as error: item[key] = {'unavailable': str(error)}\n    items.append(item)\nresult = {'page': ${pythonValue(name)}, 'elements': items}\n`;
+            nativeBackup=await backupPath();
+            const script=projectGuard(resolve(projectFilePath),parentPath)+updateVisualScript(name,updates,nativeBackup,backup(nativeBackup));
+            return reply({...await execute(projectFilePath,script),runtimeVerified:false,next:'Read changed properties; compile once after coherent edits and test HMI interaction locally'});
+        } catch(e:any) {return reply({error:e.message,nativeBackup,next:'Inspect project/backup before retrying; no automatic rollback or retry'},true);}
+    });
+    server.tool('read_visualization', 'Read selected HMI properties. Filter by text, exact variable binding or zero-based element indexes; paginate results (default 20). Filters combine with AND. Does not resolve event lists. Use returned indexes plus expected property values for updates.', {
+        ...target,name:identifier, properties:z.array(property).min(1).default([...visualProperties]),
+        textContains:z.string().min(1).optional(),variable:z.string().min(1).optional(),elementIndexes:z.array(z.number().int().min(0)).min(1).max(500).optional(),
+        offset:z.number().int().min(0).default(0),maxResults:z.number().int().min(1).max(500).default(20)
+    },async ({projectFilePath,parentPath,name,...options})=>{
+        try {
+            const script = projectGuard(resolve(projectFilePath),parentPath)+readVisualScript(name,options);
             return reply({...await execute(projectFilePath,script),runtimeVerified:false,coverage:'Basic page properties; native export preserves full event/HMI data'});
         } catch(e:any) { return reply({error:e.message},true); }
     });
