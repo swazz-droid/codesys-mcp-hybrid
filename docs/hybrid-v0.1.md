@@ -10,17 +10,19 @@ No PLC download, login, start/stop or online variable writes are added.
 | --- | --- | --- |
 | `validate_plcopen_xsd` | Windows .NET schema validation; caller supplies local XSD | Automated tests and the user's FBD XML/schema |
 | `validate_plcopen_semantic` | Standard and CODESYS embedded POUs, names, interface manifest, graphical IDs/wires, SFC initial step | Automated tests and existing LD/FBD/SFC/project exports |
-| `compile_project_diagnostics` | Existing Johannes build selection plus Build message objects | Response tests; actual SP22 run pending |
+| `compile_project_diagnostics` | Existing Johannes build selection plus Build message objects | SP22 Patch 4: passing/warning builds, located compiler errors and repaired build |
 | `get_workflow_guidance` | Native/Johannes/graphical/HMI routing and minimum usage | MCP registration/handshake |
-| `get_symbols`, `find_references` | Read project text; simple VAR declarations and comment/string-aware identifier candidates | Offline lexer/search tests; actual project scan pending |
-| `prepare_graphical_xml` | Adapt one native LD/FBD/SFC POU template, rename POU, refresh matching object IDs, replace exact variable/expression bindings | Tests and existing user templates; import of prepared outputs pending |
-| `hybrid_bridge_status` | Existing IDE bridge heartbeat/project | Disconnected/stale/project checks tested |
-| `import_graphical_xml` | Validate a POU-only file, export native backup, reject name conflicts, import, verify requested direct POU names, save | Bridge protocol/tests; actual IDE import pending |
-| `create_visualization` | New page with positions/text/bindings/tap/edit/navigation | Based on user's working API patterns; packaged tool not yet IDE-tested |
-| `read_visualization` | Basic positions/text/bindings | Packaged tool not yet IDE-tested |
+| `get_symbols`, `find_references` | Read project text; simple VAR declarations and comment/string-aware identifier candidates | Tests and actual SP22 project scan including Unicode |
+| `prepare_graphical_xml` | Adapt one native LD/FBD/SFC POU template, rename POU, refresh matching object IDs, replace exact variable/expression bindings | All three adapted templates imported, roundtrip exported and built with calls in SP22 |
+| `hybrid_bridge_status` | Existing IDE bridge heartbeat/project | Offline protection tests; live wrong-project and late read-only timeout result |
+| `import_graphical_xml` | Validate a POU-only file, export native backup, reject name conflicts, import, verify requested direct POU names, save | SP22 LD/FBD/SFC imports, compile signatures and duplicate rejection |
+| `create_visualization` | New page with positions/text/bindings/tap/edit/navigation | SP22 create/save/readback/native event payload; simulator interaction pending |
+| `read_visualization` | Basic positions/text/bindings | SP22 existing 73-element page and new 4-element Unicode page |
 
-`runtimeVerified: false` describes these new integrations. The user's previously
-reported core/native tests are not reclassified or treated as new verification.
+Capability verification is scoped to SP22 Patch 4 (3.5.22.40). Diagnostics and
+textual scans are runtime-verified. Graphical/HMI `ideApiVerified` records actual
+IDE tests while `runtimeVerified: false` retains the untested execution/UI boundary.
+The user's prior core/native tests remain separate evidence.
 The MCP smoke test uses an offline executable placeholder and calls no CODESYS
 runtime tools. Passing it proves protocol/registration behavior, not runtime compatibility.
 
@@ -106,6 +108,19 @@ Uncollectable diagnostics return `unknown`/`isError: true`, even if the build sc
 ran. Positions are preserved as CODESYS position text/offsets, not guessed line numbers.
 
 ## Local checks still required: CODESYS V3.5 SP22 Patch 4
+
+The checks below are the complete reproducible checklist. Actual completed IDE
+checks and evidence are in [hybrid-validation-report.md](hybrid-validation-report.md).
+Remaining manual checks are HMI layout/tap/edit/navigation, the Tre cylindrar
+simulation sequence (pause/resume/count/sensors/start-stop-step), and physical I/O
+if intended. Broader project/library/version coverage remains untested. A
+zero-warning fixture and manual Build-pane comparison have not been run.
+
+**Recovery finding:** SP22 native import normalized task `core_binding` from -1
+to -2 in this project. Restoring the original values removed all content differences
+in the separate recovery project. Native remains the full-fidelity transfer format,
+but compare recovered tasks/core bindings against the original before using them.
+The original Johannes tools have not been replaced to work around this IDE behavior.
 
 Perform these on disposable project copies, recording the exact tool response,
 CODESYS version/profile and Build messages:
