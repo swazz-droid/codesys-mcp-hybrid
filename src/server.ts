@@ -22,6 +22,7 @@ console.error(`>>> Initial CWD: ${process.cwd()}`);
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { XMLValidator } from "fast-xml-parser";
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -1247,7 +1248,7 @@ except Exception as e:
                 plcopen: {
                     import: false,
                     export: false,
-                    validation: false,
+                    validation: true,
                     xsdValidation: false,
                     semanticValidation: false
                 },
@@ -1298,6 +1299,180 @@ except Exception as e:
         }
     );
     // --- End Hybrid Capability Discovery ---
+
+    // Fast PLCopen XML sanity gate.
+    // Adapted from FestoCodesysMCP (MIT) for the hybrid server.
+    server.tool(
+        "validate_plcopen_xml",
+        "Fast PLCopen XML sanity validation: XML well-formedness plus CODESYS/PLCopen structural checks before import.",
+        {
+            filePath: z.string().describe("Path to the PLCopen XML file to validate.")
+        },
+        async (args) => {
+            const { filePath } = args;
+            const absPath = path.normalize(
+                path.isAbsolute(filePath)
+                    ? filePath
+                    : path.join(WORKSPACE_DIR, filePath)
+            );
+
+            try {
+                if (!(await fileExists(absPath))) {
+                    return {
+                        content: [{ type: "text", text: `PLCopen validation failed: file not found: ${absPath}` }],
+                        isError: true
+                    };
+                }
+
+                const content = await fsPromises.readFile(absPath, "utf-8");
+                const pass: string[] = [];
+                const fail: string[] = [];
+
+                // 1. XML declaration
+                content.startsWith("<?xml")
+                    ? pass.push("XML declaration")
+                    : fail.push("Missing <?xml?> declaration");
+
+                // 2. XML well-formedness
+                const xmlValid = XMLValidator.validate(content);
+                if (xmlValid === true) {
+                    pass.push("XML well-formed");
+                } else {
+                    fail.push(`XML malformed: ${xmlValid.err.msg} at line ${xmlValid.err.line}`);
+                }
+
+                // 3. PLCopen project root
+                if (content.includes("<project ") || content.includes("<project>")) {
+                    pass.push("PLCopen <project> root");
+                } else {
+                    fail.push("Missing <project> root element");
+                }
+
+                // 4. PLCopen namespace
+                content.includes("http://www.plcopen.org/xml/tc6_0200")
+                    ? pass.push("PLCopen TC6 0200 namespace")
+                    : fail.push("Missing PLCopen TC6 0200 namespace");
+
+                // 5. fileHeader
+                content.includes("<fileHeader")
+                    ? pass.push("fileHeader present")
+                    : fail.push("Missing <fileHeader>");
+
+                // 6. contentHeader
+                if (content.includes("<contentHeader") && content.includes("</contentHeader>")) {
+                    pass.push("contentHeader properly opened/closed");
+                } else if (content.includes("<contentHeader")) {
+                    fail.push("contentHeader appears self-closing");
+                } else {
+                    fail.push("Missing <contentHeader>");
+                }
+
+                // 7. coordinateInfo + FBD/LD/SFC coordinate systems
+                if (content.includes("<coordinateInfo>")) {
+                    pass.push("coordinateInfo present");
+                    const hasFbd = /<fbd[\s/>]/.test(content);
+                    const hasLd = /<ld[\s/>]/.test(content);
+                    const hasSfc = /<sfc[\s/>]/.test(content);
+                    if (hasFbd && hasLd && hasSfc) {
+                        pass.push("coordinateInfo has fbd/ld/sfc children");
+                    } else {
+                        fail.push("coordinateInfo missing fbd/ld/sfc children");
+                    }
+                } else {
+                    fail.push("Missing <coordinateInfo>");
+                }
+
+                // 8. Mandatory instances/configurations footer
+                content.includes("<instances>") && content.includes("<configurations")
+                    ? pass.push("Mandatory instances/configurations footer present")
+                    : fail.push("Missing <instances><configurations/></instances> footer");
+
+                // 9. Zero-ID rule on connection points
+                const idViolations = (content.match(/<connectionPoint(?:In|Out)\s+id=/g) || []).length;
+                idViolations === 0
+                    ? pass.push("Zero-ID rule OK")
+                    : fail.push(`Zero-ID violated: ${idViolations} connection points with id=`);
+
+                // 10. ST XHTML wrapping, only if ST exists
+                if (content.includes("<ST>")) {
+                    content.includes("<xhtml") || content.includes("<html:")
+                        ? pass.push("ST code wrapped in XHTML")
+                        : fail.push("ST code not wrapped in XHTML");
+                }
+
+                // 11. inOutVariables on blocks
+                if (content.includes("<block ")) {
+                    content.includes("<inOutVariables")
+                        ? pass.push("Blocks have inOutVariables")
+                        : fail.push("Blocks missing <inOutVariables/>");
+                }
+
+                // 12. Basic PLCopen hierarchy
+                const hasTypes = content.includes("<types>") || content.includes("<types ");
+                const hasPous =
+                    content.includes("<pous>") ||
+                    content.includes("<pous ") ||
+                    content.includes("<pous/>") ||
+                    content.includes("<pous />");
+
+                if (hasTypes && hasPous) {
+                    pass.push("Structural hierarchy contains <types> and <pous>");
+                } else {
+                    if (!hasTypes) fail.push("Missing <types> element");
+                    if (!hasPous) fail.push("Missing <pous> element");
+                }
+
+                // 13. Counts for diagnostics
+                const pouCount = (content.match(/<pou\s+name=/g) || []).length;
+                const dataTypeCount = (content.match(/<dataType\s+name=/g) || []).length;
+                const gvlCount = (content.match(/<globalVars\s+name=/g) || []).length;
+
+                const valid = fail.length === 0;
+                const report = [
+                    "PLCopen XML Validation Report",
+                    `File: ${absPath}`,
+                    "",
+                    `Contents: ${pouCount} POU(s), ${dataTypeCount} data type(s), ${gvlCount} GVL(s)`,
+                    "",
+                    `PASSED (${pass.length}):`,
+                    ...pass.map((item) => `  [OK] ${item}`)
+                ];
+
+                if (fail.length > 0) {
+                    report.push(
+                        "",
+                        `ISSUES (${fail.length}):`,
+                        ...fail.map((item) => `  [!!] ${item}`)
+                    );
+                }
+
+                report.push(
+                    "",
+                    valid
+                        ? "VERDICT: VALID (fast sanity gate passed)"
+                        : "VERDICT: FIX ISSUES BEFORE IMPORT",
+                    "",
+                    valid
+                        ? "Next: run XSD validation when available, then import."
+                        : "Next: repair/regenerate the XML and validate again."
+                );
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: report.join("\n")
+                    }],
+                    isError: !valid
+                };
+            } catch (e: any) {
+                console.error(`Error validate_plcopen_xml ${absPath}: ${e}`);
+                return {
+                    content: [{ type: "text", text: `PLCopen validation failed: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    );
 
     server.tool(
         "backup_project",
