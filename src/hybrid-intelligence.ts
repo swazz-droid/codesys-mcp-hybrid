@@ -40,17 +40,20 @@ objects = []
 failures = []
 def collect(obj, prefix):
     for child in obj.get_children(False):
-        object_path = prefix + '/' + child.get_name() if prefix else child.get_name()
+        object_path = prefix + '/' + unicode(child.get_name()) if prefix else unicode(child.get_name())
         declaration, implementation = '', ''
         for attribute, section in [('textual_declaration', 'declaration'), ('textual_implementation', 'implementation')]:
             try:
                 text_object = getattr(child, attribute, None)
-                value = text_object.text if text_object else ''
+                value = unicode(text_object.text) if text_object else ''
                 if section == 'declaration': declaration = value
                 else: implementation = value
             except Exception as error: failures.append({'objectPath': object_path, 'section': section, 'error': str(error)})
         if declaration or implementation: objects.append({'objectPath': object_path, 'declaration': declaration, 'implementation': implementation})
         collect(child, object_path)
 collect(project, '')
-result = {'objects': objects, 'readFailures': failures}
+import System
+# IronPython API strings can contain non-ASCII characters while reporting str.
+# Encode the complete JSON through .NET instead of Python's ASCII coercion.
+result = {'sourceJsonBase64': str(System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json.dumps({'objects': objects, 'readFailures': failures}, ensure_ascii=False))))}
 `;

@@ -14,10 +14,12 @@ test('bridge matches session/project and returns one result',async()=>{
   worker=setInterval(async()=>{
    try {const files=await fs.readdir(path.join(dir,'queue'));const file=files.find(f=>f.endsWith('.json'));if(!file)return;
     const req=JSON.parse(await fs.readFile(path.join(dir,'queue',file),'utf8'));assert.equal(req.session,'test');assert.equal(req.project_path,path.join(dir,'copy.project'));
-    clearInterval(worker);await fs.writeFile(path.join(dir,'results',req.id+'.json'),JSON.stringify({id:req.id,ok:true,result:{saved:true}}));
+    assert.ok(req.code.includes('ensure_ascii=False'));
+    clearInterval(worker);await fs.writeFile(path.join(dir,'results',req.id+'.json'),JSON.stringify({id:req.id,ok:true,result:{hybridResultJsonBase64:Buffer.from(JSON.stringify({saved:true,text:'Röd – översikt'}),'utf8').toString('base64')}}));
    }catch(e){if(e.code!=='ENOENT') throw e;}
   },20);
-  assert.equal((await runBridge(dir,path.join(dir,'copy.project'),'result=1',3)).saved,true);
+  const result=await runBridge(dir,path.join(dir,'copy.project'),'result=1',3);
+  assert.equal(result.saved,true);assert.equal(result.text,'Röd – översikt');
  }finally{clearInterval(worker);await fs.rm(dir,{recursive:true,force:true});}
 });
 test('timeout submits once and supplies inspection path instead of retrying',async()=>{

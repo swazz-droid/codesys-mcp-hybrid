@@ -28,17 +28,18 @@ export function registerHybridTools(server: McpServer, workspace: string) {
 }
 
 export type ProjectRunner = (projectFilePath: string, body: string) => Promise<any>;
+const decodeSources = (data: any) => data.sourceJsonBase64 ? JSON.parse(Buffer.from(data.sourceJsonBase64, 'base64').toString('utf8')) : data;
 export function registerIntelligenceTools(server: McpServer, run: ProjectRunner) {
     const schema = { projectFilePath: z.string(), scope: z.string().optional().describe('Exact slash-separated path or subtree; reduces response size'), maxResults: z.number().int().min(1).max(1000).default(100) };
     server.tool('get_symbols', 'Read project textual objects and list simple VAR declarations. Results are candidates, not compiler symbols. Narrow scope and reuse results until edits.', schema,
         async ({ projectFilePath, scope, maxResults }) => {
-            try { const data = await run(projectFilePath, collectSourcesScript); return reply({ ...getSymbols(data.objects, maxResults, scope), readFailures: data.readFailures, runtimeVerified: false }); }
+            try { const data = decodeSources(await run(projectFilePath, collectSourcesScript)); return reply({ ...getSymbols(data.objects, maxResults, scope), readFailures: data.readFailures, runtimeVerified: true, verifiedProfile: 'CODESYS V3.5 SP22 Patch 4; textual candidates only' }); }
             catch (e: any) { return reply({error:e.message},true); }
         });
     server.tool('find_references', 'Find case-insensitive identifier candidates in project text, ignoring comments/strings. Includes declarations; excludes graphical/HMI/task bindings. Does not prove symbol resolution.', {
         ...schema, symbol: z.string().regex(/^[A-Za-z_]\w*$/)
     }, async ({ projectFilePath, symbol, scope, maxResults }) => {
-        try { const data = await run(projectFilePath, collectSourcesScript); return reply({ ...findReferences(data.objects, symbol, maxResults, scope), readFailures: data.readFailures, runtimeVerified: false }); }
+        try { const data = decodeSources(await run(projectFilePath, collectSourcesScript)); return reply({ ...findReferences(data.objects, symbol, maxResults, scope), readFailures: data.readFailures, runtimeVerified: true, verifiedProfile: 'CODESYS V3.5 SP22 Patch 4; textual candidates only' }); }
         catch (e: any) { return reply({error:e.message},true); }
     });
 }

@@ -3,9 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const {validateSemantic,validateXsd} = require('../dist/hybrid-validation');
+const {validateSemantic,validateXsd,parsePlcopen} = require('../dist/hybrid-validation');
 const graph = (nodes, name='Demo') => `<project xmlns="http://www.plcopen.org/xml/tc6_0200"><types><pous><pou name="${name}"><body><LD>${nodes}</LD></body></pou></pous></types></project>`;
 const contact = id => `<contact localId="${id}"><position x="0" y="0"/></contact>`;
+test('normalized PLCopen retains default/prefixed root namespace for the import gate',()=>{
+ for(const namespace of ['http://www.plcopen.org/xml/tc6_0200','http://www.plcopen.org/xml/tc6_0201']) {
+  assert.equal(parsePlcopen(`<project xmlns="${namespace}"/>`)['@_xmlns'],namespace);
+  assert.equal(parsePlcopen(`<p:project xmlns:p="${namespace}"/>`)['@_xmlns'],namespace);
+ }
+});
 test('graph references resolve within body and normalized IDs collide', () => {
  assert.equal(validateSemantic(graph(contact('1')+contact('01'))).valid,false);
  assert.equal(validateSemantic(graph(contact('1')+'<coil localId="2"><position x="1" y="1"/><connectionPointIn><connection refLocalId="1"/></connectionPointIn></coil>')).valid,true);

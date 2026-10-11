@@ -17,7 +17,8 @@ export function compileReport(output: string, scriptSuccess: boolean) {
 // ScriptSystem API: https://content.helpme-codesys.com/en/ScriptingEngine/ScriptSystem.html
 export const beforeBuild = `
     import json
-    build_category = '{97F48D64-A2A3-4856-B640-75C046E37EA9}'
+    from System import Guid
+    build_category = Guid('97F48D64-A2A3-4856-B640-75C046E37EA9')
     diagnostic_error = None
     try: system.clear_messages(build_category)
     except Exception as clear_error: diagnostic_error = str(clear_error)
@@ -28,16 +29,23 @@ export const afterBuild = `
         if diagnostic_error: raise RuntimeError(diagnostic_error)
         for message in system.get_message_objects(build_category):
             object_path = None
-            obj = message.object
-            if obj:
-                parts = []
-                while obj and not getattr(obj, 'is_project', False):
-                    parts.insert(0, obj.get_name())
-                    obj = obj.parent
-                object_path = '/'.join(parts)
-            prefix, number = message.prefix, message.number
-            code = (str(prefix) + str(number).zfill(4)) if prefix is not None and number is not None else None
-            diagnostics.append({'severity': str(message.severity), 'code': code, 'message': message.text, 'objectPath': object_path, 'positionText': message.position_text, 'position': message.position, 'positionOffset': message.position_offset})
+            position_text = None
+            location_error = None
+            try:
+                obj = message.object
+                if obj:
+                    parts = []
+                    while obj and hasattr(obj, 'get_name'):
+                        parts.insert(0, obj.get_name())
+                        obj = obj.parent
+                    object_path = '/'.join(parts)
+                position_text = message.position_text
+            except Exception as location_exception: location_error = str(location_exception)
+            prefix = str(message.prefix) if message.prefix is not None else None
+            number = int(message.number) if message.number is not None else None
+            code = (prefix + str(number).zfill(4)) if prefix is not None and number is not None else None
+            diagnostics.append({'severity': str(message.severity), 'code': code, 'message': str(message.text), 'objectPath': object_path, 'positionText': str(position_text) if position_text is not None else None, 'position': int(message.position), 'positionOffset': int(message.position_offset), 'locationError': location_error})
     except Exception as collection_error: diagnostic_error = str(collection_error)
-    print('HYBRID_RESULT:' + json.dumps({'buildCompleted': True, 'diagnosticsAvailable': diagnostic_error is None, 'collectionError': diagnostic_error, 'diagnostics': diagnostics, 'application': app_name, 'project': PROJECT_FILE_PATH}))
+    diagnostic_result = {'buildCompleted': True, 'diagnosticsAvailable': diagnostic_error is None, 'collectionError': diagnostic_error, 'diagnostics': diagnostics, 'application': app_name, 'project': PROJECT_FILE_PATH}
+    print('HYBRID_RESULT:' + json.dumps(diagnostic_result))
 `;

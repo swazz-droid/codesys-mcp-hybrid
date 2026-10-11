@@ -23,7 +23,13 @@ export function parsePlcopen(xml: string): any {
     const valid = XMLValidator.validate(xml);
     if (valid !== true) throw new Error(`Malformed XML: ${valid.err.msg}`);
     const document = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', removeNSPrefix: true, parseTagValue: false, parseAttributeValue: false }).parse(xml);
-    if (!document.project) throw new Error('PLCopen project root is required');
+    if (!Object.prototype.hasOwnProperty.call(document, 'project')) throw new Error('PLCopen project root is required');
+    if (!document.project || typeof document.project !== 'object') document.project = {};
+    // Namespace normalization removes xmlns; retain the original root namespace
+    // for the import gate, including prefixed PLCopen documents.
+    const raw = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false }).parse(xml);
+    const rootKey = Object.keys(raw).find(key => key.split(':').pop() === 'project');
+    if (rootKey) document.project['@_xmlns'] = raw[rootKey][rootKey.includes(':') ? '@_xmlns:' + rootKey.split(':')[0] : '@_xmlns'];
     return document.project;
 }
 export interface ExpectedVariable { name: string; type?: string; initialValue?: string; }

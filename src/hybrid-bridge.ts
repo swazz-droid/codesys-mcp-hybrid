@@ -19,6 +19,9 @@ export async function runBridge(directory: string, projectFilePath: string, code
     const queue = path.join(directory, 'queue');
     await mkdir(queue, { recursive: true });
     const temporary = path.join(queue, id + '.tmp');
+    // Native IronPython API strings may report str despite containing Unicode.
+    // Keep the bridge's outer result ASCII and decode the UTF-8 JSON locally.
+    code += "\nimport json, System\nresult = {'hybridResultJsonBase64': str(System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json.dumps(result, ensure_ascii=False))))}\n";
     await writeFile(temporary, JSON.stringify({ id, operation: 'run_script', code, session: status.session, project_path: status.project_path, expires: Date.now() / 1000 + timeoutSeconds }), { flag: 'wx' });
     await rename(temporary, path.join(queue, id + '.json'));
     const resultPath = path.join(directory, 'results', id + '.json');
@@ -30,7 +33,7 @@ export async function runBridge(directory: string, projectFilePath: string, code
         if (response) {
             if (response.id !== id) throw new Error(`Mismatched bridge result ${resultPath}; inspect before retrying`);
             if (response.ok !== true) throw new Error(`Bridge request ${id} failed: ${response.error}; inspect project before retrying`);
-            return response.result;
+            return response.result?.hybridResultJsonBase64 ? JSON.parse(Buffer.from(response.result.hybridResultJsonBase64, 'base64').toString('utf8')) : response.result;
         }
         await new Promise(resolve => setTimeout(resolve, 100));
     }

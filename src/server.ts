@@ -27,7 +27,7 @@ import { registerHybridTools, registerIntelligenceTools } from './hybrid-tools';
 import { beforeBuild, afterBuild, compileReport, readEnvelope } from './hybrid-diagnostics';
 import { hybridInstructions } from './hybrid-guidance';
 import { registerIdeTools } from './hybrid-ide-tools';
-import { bridgeStatus, pythonValue } from './hybrid-bridge';
+import { bridgeStatus, pythonValue, runBridge, projectGuard } from './hybrid-bridge';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -1252,7 +1252,9 @@ except Exception as e:
                     supported: true,
                     structuredDiagnostics: true,
                     diagnosticsTool: 'compile_project_diagnostics',
-                    diagnosticsRuntimeVerified: false
+                    diagnosticsRuntimeVerified: true,
+                    verifiedProfile: 'CODESYS V3.5 SP22 Patch 4 (3.5.22.40)',
+                    verifiedCases: 'Warning-only Build; compiler errors with object/position; repaired Build'
                 },
 
                 plcopen: {
@@ -1278,6 +1280,8 @@ except Exception as e:
                     CFC: false,
                     mode: 'Single native POU template adaptation + validated import via existing IDE bridge',
                     runtimeVerified: false,
+                    ideApiVerified: true,
+                    verificationScope: 'SP22 Patch 4: LD/FBD/SFC import, roundtrip export, called-POU Build/signature and collision rejection; execution behavior untested',
                     requiresBridge: true
                 },
 
@@ -1287,6 +1291,8 @@ except Exception as e:
                     writeMode: 'Create new pages only; reject existing pages',
                     webVisuCreation: false,
                     runtimeVerified: false,
+                    ideApiVerified: true,
+                    verificationScope: 'SP22 Patch 4: create/save/readback including Unicode, native tap/edit/navigation payload and collision rejection; user interaction untested',
                     requiresBridge: true
                 },
 
@@ -1295,7 +1301,8 @@ except Exception as e:
                     findReferences: true,
                     compilerResolved: false,
                     coverage: 'Textual candidates only; graphical/HMI/task references excluded',
-                    runtimeVerified: false
+                    runtimeVerified: true,
+                    verificationScope: 'SP22 Patch 4: actual project text traversal, Unicode GVL, bounded symbols/reference candidates; compiler resolution unsupported'
                 },
 
                 safety: {
@@ -2035,6 +2042,7 @@ except Exception as e:
     // --- End Tools ---
     registerIntelligenceTools(server, async (projectFilePath, body) => {
         const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
+        if (hybridBridgeDir) return runBridge(hybridBridgeDir, absPath, projectGuard(absPath, '') + body);
         const ensure = ENSURE_PROJECT_OPEN_PYTHON_SNIPPET.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${pythonValue(absPath)}`);
         const script = 'import json\n' + ensure + '\nproject = ensure_project_open(PROJECT_FILE_PATH)\n' + body + '\nprint("HYBRID_RESULT:" + json.dumps(result))\nprint("SCRIPT_SUCCESS: project scan complete")\n';
         const execution = await executeCodesysScript(script, codesysExePath, codesysProfileName);
@@ -2048,7 +2056,12 @@ except Exception as e:
             const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
             const template = COMPILE_PROJECT_SCRIPT_TEMPLATE.replace('    target_app.build();', beforeBuild + '\n    target_app.build();\n' + afterBuild);
             const script = 'import json\n' + template.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${pythonValue(absPath)}`);
-            const result = await executeCodesysScript(script, codesysExePath, codesysProfileName);
+            let result: {success: boolean; output: string};
+            if (hybridBridgeDir) {
+                const bridgeScript = projectGuard(absPath, '') + script.replace(/sys\.exit\(0\)/g, 'pass').replace(/sys\.exit\(1\)/g, 'raise RuntimeError(error_message)') + '\nresult = diagnostic_result\n';
+                const data = await runBridge(hybridBridgeDir, absPath, bridgeScript, 45);
+                result = {success: true, output: 'HYBRID_RESULT:' + JSON.stringify(data)};
+            } else result = await executeCodesysScript(script, codesysExePath, codesysProfileName);
             const report = compileReport(result.output, result.success);
             return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }], isError: report.status !== 'passed' };
         } catch (e: any) { return { content: [{ type: 'text', text: JSON.stringify({status:'unknown',error:e.message,next:'Inspect CODESYS; do not automatically retry a timeout'}) }], isError: true }; }

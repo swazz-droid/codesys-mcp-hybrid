@@ -20,6 +20,8 @@ test('real MCP handshake preserves core tools and exposes truthful offline hybri
   }
   const cap=JSON.parse((await client.callTool({name:'get_capabilities',arguments:{}})).content[0].text);
   assert.equal(cap.plcopen.xsdValidation,true);assert.equal(cap.graphical.runtimeVerified,false);assert.equal(cap.bridge.connected,false);
+  assert.equal(cap.compile.diagnosticsRuntimeVerified,true);assert.equal(cap.graphical.ideApiVerified,true);
+  assert.equal(cap.visualization.runtimeVerified,false);assert.equal(cap.codeIntelligence.compilerResolved,false);
   const xml=path.join(dir,'test.xml');await fs.writeFile(xml,'<project><types><pous/></types></project>');
   const ok=await client.callTool({name:'validate_plcopen_semantic',arguments:{filePath:xml}});assert.equal(ok.isError,false);
   const failed=await client.callTool({name:'validate_plcopen_semantic',arguments:{filePath:xml,expectedPous:['Missing']}});assert.equal(failed.isError,true);
