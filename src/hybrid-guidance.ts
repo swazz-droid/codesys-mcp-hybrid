@@ -1,0 +1,13 @@
+export const hybridInstructions = `Use Johannes tools for normal project/POU/ST operations. Read get_capabilities once per session or after a configuration change. Native .export import/export is the full-fidelity transfer/backup path, including HMI; PLCopen is not a full project backup. Generate graphical LD/FBD/SFC XML from native templates, preserve CODESYS extensions, then validate XML, XSD and semantics before import into a working copy. HMI uses the existing IDE script bridge. Do not use ST writes to replace graphical bodies. Discover the target once, read only relevant code, apply coherent edits, save once and compile once. Use compile_project_diagnostics to confirm Build messages; unknown diagnostics are not a clean build. Symbol/reference results are textual candidates, not compiler-resolved references. Avoid repeated tree dumps, capability calls and full compiles. Never retry timed-out mutations automatically. No PLC download, login or online actions are part of these tools.`;
+export function routeOperation(operation: string) {
+    const routes: Record<string, any> = {
+        st: { route: 'Johannes', tools: ['get_project_structure', 'get_pou_code', 'set_pou_code'], next: 'Read target once, edit coherently, save and compile once' },
+        backup: { route: 'native', tools: ['backup_project', 'native_export'], next: 'Retain .project backup and full native .export; check contents' },
+        transfer: { route: 'native', tools: ['native_export', 'native_import'], next: 'Use a working copy; inspect tree/HMI/I/O/tasks after import' },
+        graphical: { route: 'PLCopen + scripting', tools: ['validate_plcopen_xml', 'validate_plcopen_xsd', 'validate_plcopen_semantic', 'import_graphical_xml'], next: 'Preserve native body/extensions, import into working copy, inspect objects and task bindings, compile' },
+        hmi: { route: 'IDE scripting', tools: ['hybrid_bridge_status', 'read_visualization', 'create_visualization'], next: 'Use existing Visualization Manager/WebVisu; back up, edit page, compile and test HMI interactions' },
+        diagnostics: { route: 'Johannes build + message collection', tools: ['compile_project_diagnostics'], next: 'Fix actual reported errors, batch edits, compile once' },
+        intelligence: { route: 'project text scan', tools: ['get_symbols', 'find_references'], next: 'Confirm candidate bindings/types in CODESYS before rename or refactor' }
+    };
+    return { ...routes[operation], minimumUsage: 'One discovery/read per target, coherent edits, one save/build; reuse outputs until project changes', runtimeVerified: false };
+}

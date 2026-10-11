@@ -25,6 +25,7 @@ import { z } from "zod";
 import { XMLValidator } from "fast-xml-parser";
 import { registerHybridTools } from './hybrid-tools';
 import { beforeBuild, afterBuild, compileReport } from './hybrid-diagnostics';
+import { hybridInstructions } from './hybrid-guidance';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -98,7 +99,7 @@ export async function startMcpServer(config: ServerConfig) {
             resources: { listChanged: true }, // Assuming you might want to notify if resources change dynamically
             tools: { listChanged: true }      // Assuming you might want to notify if tools change dynamically (less common)
          }
-    });
+    }, { instructions: hybridInstructions });
     console.error("SERVER.TS: McpServer instance created.");
     registerHybridTools(server, WORKSPACE_DIR);
     // --- End MCP Server Initialization ---

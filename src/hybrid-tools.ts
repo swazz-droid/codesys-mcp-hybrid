@@ -3,10 +3,14 @@ import { z } from 'zod';
 import * as path from 'path';
 import { readFile } from 'fs/promises';
 import { validateSemantic, validateXsd } from './hybrid-validation';
+import { routeOperation } from './hybrid-guidance';
 
 export const reply = (data: any, failed = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], isError: failed });
 export function registerHybridTools(server: McpServer, workspace: string) {
     const resolve = (file: string) => path.resolve(workspace, file);
+    server.tool('get_workflow_guidance', 'Choose the smallest useful hybrid workflow; call only when the route is unclear.', {
+        operation: z.enum(['st', 'backup', 'transfer', 'graphical', 'hmi', 'diagnostics', 'intelligence'])
+    }, async ({ operation }) => reply(routeOperation(operation)));
     server.tool('validate_plcopen_xsd', 'Validate PLCopen XML against a local schema using Windows .NET. No downloads or CODESYS launch. Follow with semantic validation.', {
         filePath: z.string(), xsdPath: z.string().describe('Local PLCopen XSD matching the XML namespace; required because schema redistribution terms are unverified')
     }, async ({ filePath, xsdPath }) => {
