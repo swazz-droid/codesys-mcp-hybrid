@@ -36,7 +36,7 @@ try {
     } finally { $reader.Dispose() }
     $errors = @($issues.ToArray() | Where-Object { $_.severity -eq 'error' })
     $warnings = @($issues.ToArray() | Where-Object { $_.severity -ne 'error' })
-    @{gate='xsd'; valid=($rootChecked -and $errors.Count -eq 0); issues=$errors; warnings=$warnings; schema=$XsdPath; runtimeVerified=$false} | ConvertTo-Json -Depth 8 -Compress
+    @{gate='xsd'; valid=($rootChecked -and $errors.Count -eq 0); issues=@($errors | Select-Object -First 50); warnings=@($warnings | Select-Object -First 50); totalErrors=$errors.Count; totalWarnings=$warnings.Count; schema=$XsdPath; runtimeVerified=$false} | ConvertTo-Json -Depth 8 -Compress
 } catch {
     @{gate='xsd'; valid=$false; issues=@(@{code='XSD_EXECUTION_ERROR'; message=$_.Exception.Message}); runtimeVerified=$false} | ConvertTo-Json -Depth 8 -Compress
 }

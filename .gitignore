@@ -8,6 +8,8 @@ yarn-error.log
 # Build artifacts
 /dist
 /build
+/hybrid-backups
+/hybrid-staging
 
 # Environment variables
 .env

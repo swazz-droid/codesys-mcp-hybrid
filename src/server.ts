@@ -26,6 +26,8 @@ import { XMLValidator } from "fast-xml-parser";
 import { registerHybridTools, registerIntelligenceTools } from './hybrid-tools';
 import { beforeBuild, afterBuild, compileReport, readEnvelope } from './hybrid-diagnostics';
 import { hybridInstructions } from './hybrid-guidance';
+import { registerIdeTools } from './hybrid-ide-tools';
+import { bridgeStatus, pythonValue } from './hybrid-bridge';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
 import { stat } from "fs/promises"; // For file existence check (async)
@@ -102,6 +104,8 @@ export async function startMcpServer(config: ServerConfig) {
     }, { instructions: hybridInstructions });
     console.error("SERVER.TS: McpServer instance created.");
     registerHybridTools(server, WORKSPACE_DIR);
+    const hybridBridgeDir = process.env.CODESYS_BRIDGE_DIR || '';
+    registerIdeTools(server, WORKSPACE_DIR, hybridBridgeDir);
     // --- End MCP Server Initialization ---
 
 
@@ -1252,7 +1256,8 @@ except Exception as e:
                 },
 
                 plcopen: {
-                    import: false,
+                    import: true,
+                    importScope: 'Graphical POU-only XML via connected IDE bridge',
                     export: false,
                     validation: true,
                     xsdValidation: true,
@@ -1267,15 +1272,22 @@ except Exception as e:
                 },
 
                 graphical: {
-                    LD: false,
-                    FBD: false,
-                    SFC: false,
-                    CFC: false
+                    LD: true,
+                    FBD: true,
+                    SFC: true,
+                    CFC: false,
+                    mode: 'Single native POU template adaptation + validated import via existing IDE bridge',
+                    runtimeVerified: false,
+                    requiresBridge: true
                 },
 
                 visualization: {
-                    read: false,
-                    write: false
+                    read: true,
+                    write: true,
+                    writeMode: 'Create new pages only; reject existing pages',
+                    webVisuCreation: false,
+                    runtimeVerified: false,
+                    requiresBridge: true
                 },
 
                 codeIntelligence: {
@@ -1292,9 +1304,11 @@ except Exception as e:
                     workspaceRestriction: false
                 },
 
+                bridge: await bridgeStatus(hybridBridgeDir),
                 performance: {
                     batchOperations: false,
-                    persistentCodesysSession: false
+                    persistentCodesysSession: false,
+                    ideBridgeUsesExistingSession: true
                 }
             };
 
@@ -1360,9 +1374,9 @@ except Exception as e:
                 }
 
                 // 4. PLCopen namespace
-                content.includes("http://www.plcopen.org/xml/tc6_0200")
-                    ? pass.push("PLCopen TC6 0200 namespace")
-                    : fail.push("Missing PLCopen TC6 0200 namespace");
+                (content.includes("http://www.plcopen.org/xml/tc6_0200") || content.includes("http://www.plcopen.org/xml/tc6_0201"))
+                    ? pass.push("PLCopen TC6 0200/0201 namespace")
+                    : fail.push("Missing PLCopen TC6 0200/0201 namespace");
 
                 // 5. fileHeader
                 content.includes("<fileHeader")
@@ -2021,7 +2035,7 @@ except Exception as e:
     // --- End Tools ---
     registerIntelligenceTools(server, async (projectFilePath, body) => {
         const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
-        const ensure = ENSURE_PROJECT_OPEN_PYTHON_SNIPPET.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${JSON.stringify(absPath)}`);
+        const ensure = ENSURE_PROJECT_OPEN_PYTHON_SNIPPET.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${pythonValue(absPath)}`);
         const script = 'import json\n' + ensure + '\nproject = ensure_project_open(PROJECT_FILE_PATH)\n' + body + '\nprint("HYBRID_RESULT:" + json.dumps(result))\nprint("SCRIPT_SUCCESS: project scan complete")\n';
         const execution = await executeCodesysScript(script, codesysExePath, codesysProfileName);
         if (!execution.success) throw new Error(execution.output);
@@ -2033,7 +2047,7 @@ except Exception as e:
         try {
             const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
             const template = COMPILE_PROJECT_SCRIPT_TEMPLATE.replace('    target_app.build();', beforeBuild + '\n    target_app.build();\n' + afterBuild);
-            const script = template.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${JSON.stringify(absPath)}`);
+            const script = 'import json\n' + template.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${pythonValue(absPath)}`);
             const result = await executeCodesysScript(script, codesysExePath, codesysProfileName);
             const report = compileReport(result.output, result.success);
             return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }], isError: report.status !== 'passed' };

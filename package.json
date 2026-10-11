@@ -6,9 +6,11 @@
   "bin": {
     "codesys-mcp-tool": "./dist/bin.js"
   },
+  "files": ["dist", "scripts", "docs", "examples", "third-party", "NOTICE.md", "LICENSE", "README.md"],
   "scripts": {
     "test": "npm run build && node --test tests/*.test.cjs",
     "build": "tsc",
+    "prepack": "npm run build",
     "start": "node ./dist/server.js"
   },
   "keywords": [

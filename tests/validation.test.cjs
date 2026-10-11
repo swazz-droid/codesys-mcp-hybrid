@@ -39,6 +39,9 @@ test('XSD engine rejects schema-invalid XML and accepts valid XML', {skip:proces
   await fs.writeFile(xsd,'<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="project"><xs:complexType><xs:attribute name="name" type="xs:string" use="required"/></xs:complexType></xs:element></xs:schema>');
   await fs.writeFile(xml,'<project name="valid"/>');assert.equal((await validateXsd(xml,xsd)).valid,true);
   await fs.writeFile(xml,'<project/>');assert.equal((await validateXsd(xml,xsd)).valid,false);
+  await fs.writeFile(xml,'<other/>');assert.equal((await validateXsd(xml,xsd)).valid,false);
+  await fs.writeFile(xsd,'<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="project"><xs:complexType><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:schema>');
+  await fs.writeFile(xml,'<project><VendorExtension/></project>');const lax=await validateXsd(xml,xsd);assert.equal(lax.valid,true);assert.ok(lax.totalWarnings>0);
   await fs.writeFile(xml,'<!DOCTYPE project [<!ENTITY x SYSTEM "file:///does-not-exist">]><project name="&x;"/>');assert.equal((await validateXsd(xml,xsd)).valid,false);
  }finally{await fs.rm(dir,{recursive:true,force:true});}
 });
