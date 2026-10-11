@@ -23,8 +23,8 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { XMLValidator } from "fast-xml-parser";
-import { registerHybridTools } from './hybrid-tools';
-import { beforeBuild, afterBuild, compileReport } from './hybrid-diagnostics';
+import { registerHybridTools, registerIntelligenceTools } from './hybrid-tools';
+import { beforeBuild, afterBuild, compileReport, readEnvelope } from './hybrid-diagnostics';
 import { hybridInstructions } from './hybrid-guidance';
 import { executeCodesysScript } from "./codesys_interop"; // Assumes this utility exists
 import * as path from 'path';
@@ -1279,8 +1279,11 @@ except Exception as e:
                 },
 
                 codeIntelligence: {
-                    symbols: false,
-                    findReferences: false
+                    symbols: true,
+                    findReferences: true,
+                    compilerResolved: false,
+                    coverage: 'Textual candidates only; graphical/HMI/task references excluded',
+                    runtimeVerified: false
                 },
 
                 safety: {
@@ -2016,6 +2019,14 @@ except Exception as e:
         }
     );
     // --- End Tools ---
+    registerIntelligenceTools(server, async (projectFilePath, body) => {
+        const absPath = path.resolve(WORKSPACE_DIR, projectFilePath);
+        const ensure = ENSURE_PROJECT_OPEN_PYTHON_SNIPPET.replace('PROJECT_FILE_PATH = r"{PROJECT_FILE_PATH}"', `PROJECT_FILE_PATH = ${JSON.stringify(absPath)}`);
+        const script = 'import json\n' + ensure + '\nproject = ensure_project_open(PROJECT_FILE_PATH)\n' + body + '\nprint("HYBRID_RESULT:" + json.dumps(result))\nprint("SCRIPT_SUCCESS: project scan complete")\n';
+        const execution = await executeCodesysScript(script, codesysExePath, codesysProfileName);
+        if (!execution.success) throw new Error(execution.output);
+        return readEnvelope(execution.output);
+    });
     server.tool('compile_project_diagnostics', 'Build using the existing Johannes application selection, collect structured Build messages. Unknown diagnostics never mean a successful compile. No PLC download.', {
         projectFilePath: z.string()
     }, async ({ projectFilePath }) => {

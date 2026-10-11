@@ -4,6 +4,7 @@ import * as path from 'path';
 import { readFile } from 'fs/promises';
 import { validateSemantic, validateXsd } from './hybrid-validation';
 import { routeOperation } from './hybrid-guidance';
+import { collectSourcesScript, getSymbols, findReferences } from './hybrid-intelligence';
 
 export const reply = (data: any, failed = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], isError: failed });
 export function registerHybridTools(server: McpServer, workspace: string) {
@@ -22,5 +23,21 @@ export function registerHybridTools(server: McpServer, workspace: string) {
     }, async ({ filePath, expectedPous, externalTypes }) => {
         try { const report = validateSemantic(await readFile(resolve(filePath), 'utf8'), expectedPous, externalTypes); return reply(report, !report.valid); }
         catch (e: any) { return reply({ valid: false, error: e.message }, true); }
+    });
+}
+
+export type ProjectRunner = (projectFilePath: string, body: string) => Promise<any>;
+export function registerIntelligenceTools(server: McpServer, run: ProjectRunner) {
+    const schema = { projectFilePath: z.string(), scope: z.string().optional().describe('Exact slash-separated path or subtree; reduces response size'), maxResults: z.number().int().min(1).max(1000).default(100) };
+    server.tool('get_symbols', 'Read project textual objects and list simple VAR declarations. Results are candidates, not compiler symbols. Narrow scope and reuse results until edits.', schema,
+        async ({ projectFilePath, scope, maxResults }) => {
+            try { const data = await run(projectFilePath, collectSourcesScript); return reply({ ...getSymbols(data.objects, maxResults, scope), readFailures: data.readFailures, runtimeVerified: false }); }
+            catch (e: any) { return reply({error:e.message},true); }
+        });
+    server.tool('find_references', 'Find case-insensitive identifier candidates in project text, ignoring comments/strings. Includes declarations; excludes graphical/HMI/task bindings. Does not prove symbol resolution.', {
+        ...schema, symbol: z.string().regex(/^[A-Za-z_]\w*$/)
+    }, async ({ projectFilePath, symbol, scope, maxResults }) => {
+        try { const data = await run(projectFilePath, collectSourcesScript); return reply({ ...findReferences(data.objects, symbol, maxResults, scope), readFailures: data.readFailures, runtimeVerified: false }); }
+        catch (e: any) { return reply({error:e.message},true); }
     });
 }
